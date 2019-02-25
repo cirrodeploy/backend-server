@@ -31,7 +31,7 @@ app = Flask(__name__)
 
 @app.route('/isAlive')
 def index():
-    return "true"
+    return "true mf"
 
 @app.route('/start_server', methods=['GET','POST'])
 def start_server():
@@ -48,6 +48,7 @@ def start_server():
         keypair = ec2.create_key_pair(KeyName = username)
         filehandler = open(private_key_path, "w")
         filehandler.write(keypair['KeyMaterial'])
+        filehandler.close()
         subprocess.run(["chmod","400",private_key_path])
 
     session = boto3.Session()
@@ -57,21 +58,21 @@ def start_server():
     terraform_json = {}
     terraform_json["resource"] = {}
     terraform_json["resource"]["aws_instance"] = {}
-    terraform_json["resource"]["aws_instance"]["example"] = {"ami" : "ami-01e24be29428c15b2", "instance_type": "t2.micro", "key_name": username}
-    terraform_json["resource"]["aws_instance"]["example"]["connection"] = {"private_key": private_key_path_json_path, "type": "ssh", "user" : "ec2-user", "timeout" : "1m"}
-    terraform_json["resource"]["aws_instance"]["example"]["provisioner"] = {}
-    terraform_json["resource"]["aws_instance"]["example"]["provisioner"]["remote-exec"] = {"script": directory + "script.sh"}
+    terraform_json["resource"]["aws_instance"]["configuration"] = {"ami" : "ami-01e24be29428c15b2", "instance_type": "t2.micro", "key_name": username}
+    terraform_json["resource"]["aws_instance"]["configuration"]["connection"] = {"private_key": private_key_path_json_path, "type": "ssh", "user" : "ec2-user", "timeout" : "1m"}
+    terraform_json["resource"]["aws_instance"]["configuration"]["provisioner"] = {}
+    terraform_json["resource"]["aws_instance"]["configuration"]["provisioner"]["remote-exec"] = {"script": directory + "script.sh"}
     terraform_json["provider"] = {}
+    # Provider needs to changed based on user's input in the future.
     terraform_json["provider"]["aws"] = {"access_key": aws_credentials.access_key , "secret_key": aws_credentials.secret_key, "region": "us-west-2"} 
 
-    with open(directory + 'example_4.tf', 'w') as f:
+    with open(directory + 'configuration.tf', 'w') as f:
         json.dump(terraform_json, f)
 
     @after_this_request
     def remove_file(response):
         try:
             os.remove(private_key_path)
-            filehandler.close()
         except Exception as error:
             print("Error removing or closing downloaded file handle")
         return response
