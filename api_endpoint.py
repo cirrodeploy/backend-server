@@ -8,8 +8,9 @@ import pickle
 import json
 import os
 import boto3
+import docker
 import subprocess
-from flask import send_file, after_this_request
+from flask import send_file, after_this_request, Response
 
 class InvalidInput(Exception):
     status_code = 400
@@ -53,6 +54,7 @@ def start_server():
 
     session = boto3.Session()
     aws_credentials = session.get_credentials()
+    docker_client = docker.from_env()
 
     private_key_path_json_path = "${file(\"" + private_key_path + "\")}"   
     terraform_json = {}
@@ -69,14 +71,24 @@ def start_server():
     with open(directory + 'configuration.tf', 'w') as f:
         json.dump(terraform_json, f)
 
-    @after_this_request
-    def remove_file(response):
-        try:
-            os.remove(private_key_path)
-        except Exception as error:
-            print("Error removing or closing downloaded file handle")
-        return response
-    return send_file(private_key_path, as_attachment = True, attachment_filename = username + ".pem")
+    commands_to_run = 'bash -c "terraform init && terraform plan && terraform apply -auto-approve"'
+    docker_container = docker_client.containers.run('terrform_test', volumes = {directory: {'bind': directory, 'mode': 'rw'}}, working_dir = directory, command = commands_to_run, detach = True)
+    logs = docker_container.logs(stream = True)
+    
+    def sending_response():
+        for val in logs:
+            yield val
+
+    # TODO: Figure out a way to delete private key and run terraform commands later.
+    # @after_this_request
+    # def remove_file(response):
+    #     try:
+    #         os.remove(private_key_path)
+    #     except Exception as error:
+    #         print("Error removing or closing downloaded file handle")
+    #     return response
+    # return send_file(private_key_path, as_attachment = True, attachment_filename = username + ".pem")
+    return Response(sending_response(), mimetype= 'text/plain')
 
 
 @app.errorhandler(InvalidInput)
