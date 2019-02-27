@@ -28,6 +28,7 @@ class InvalidInput(Exception):
         return rv
 
 
+docker_client = docker.from_env()
 app = Flask(__name__)
 
 @app.route('/isAlive')
@@ -54,7 +55,6 @@ def start_server():
 
     session = boto3.Session()
     aws_credentials = session.get_credentials()
-    docker_client = docker.from_env()
 
     private_key_path_json_path = "${file(\"" + private_key_path + "\")}"   
     terraform_json = {}
@@ -90,6 +90,23 @@ def start_server():
     # return send_file(private_key_path, as_attachment = True, attachment_filename = username + ".pem")
     return Response(sending_response(), mimetype= 'text/plain')
 
+@app.route('/stop_server', methods=['GET','POST'])
+def stop_server():
+    #content = request.get_json(silent=True)
+    username = 'rondo'
+    directory = '/Users/varadarajanganesan/Git/test-terraform/' + username + '/'
+
+    docker_container = docker_client.containers.run('terrform_test', 
+                                                     volumes = {directory: {'bind': directory, 'mode': 'rw'}}, 
+                                                     working_dir = directory, 
+                                                     command = "terraform destroy -auto-approve", 
+                                                     detach = True)
+    logs = docker_container.logs(stream = True)
+    def streaming_response():
+        for val in logs:
+            yield val
+
+    return Response(streaming_response(), mimetype= 'text/plain')
 
 @app.errorhandler(InvalidInput)
 def handle_invalid_usage(error):
